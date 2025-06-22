@@ -1,0 +1,1 @@
+import{dO as o,j as n,E as l}from"./bundle.D3-hVUGj.js";function c(a){var r;const s=o();return n.jsx(l,{value:a.value,onValueChange:a.onChange,withBlank:!0,errorMessage:a.errorMessage,customSelector:!0,children:(r=s.data)==null?void 0:r.payment_types.sort((e,t)=>e.name.localeCompare(t.name)).map((e,t)=>n.jsx("option",{value:e.id,children:e.name},t))})}export{c as P};

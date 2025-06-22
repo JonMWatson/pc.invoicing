@@ -1,0 +1,9 @@
+import{t as _,p as o,bc as k}from"./bundle.D3-hVUGj.js";import{g as d,i as r}from"./useProductColumns-BqpEcmPs.js";/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */function p(){const a=_(),[$,c]=o.useState([]);return o.useEffect(()=>{let t=k.clone(a==null?void 0:a.settings.pdf_variables.task_columns)||[],e=k.clone(a==null?void 0:a.settings.pdf_variables.task_columns)||[];const f=e.length;t.includes("$task.service")||(t=["$task.service",...t],e=["$task.service",...e]),f||t.push("$task.description"),t.includes("$task.rate")||(t.push("$task.rate"),e.push("$task.rate")),t.includes("$task.hours")||(t.push("$task.hours"),e.push("$task.hours"));const i=[],u=(a==null?void 0:a.enabled_item_tax_rates)||0;u>0&&i.push("$task.tax_rate1"),u>1&&i.push("$task.tax_rate2"),u>2&&i.push("$task.tax_rate3");const n=d("$task.tax",e,t);t=r(n,i,t),e=r(n,i,e),t=t.filter(s=>s!=="$task.tax"),e=e.filter(s=>s!=="$task.tax"),a.enable_product_discount||(t=t.filter(s=>s!=="$task.discount"),e=e.filter(s=>s!=="$task.discount")),a.enable_product_discount&&!t.includes("$task.discount")&&(t.push("$task.discount"),e.push("$task.discount")),["task1","task2","task3","task4"].forEach(s=>{a!=null&&a.custom_fields[s]&&!e.includes(`$task.${s}`)&&(t=r(t.length,[`$task.${s}`],t)),!(a!=null&&a.custom_fields[s])&&e.includes(`$task.${s}`)&&(t=t.filter(l=>l!==`$task.${s}`),e=e.filter(l=>l!==`$task.${s}`))}),t.includes("$task.tax_amount")&&(t=t.filter(s=>s!=="$task.tax_amount"),t.push("$task.tax_amount")),t.includes("$task.gross_line_total")&&(t=t.filter(s=>s!=="$task.gross_line_total"),t.push("$task.gross_line_total")),t.includes("$task.line_total")&&(t=t.filter(s=>s!=="$task.line_total"),t.push("$task.line_total")),c(t)},[a]),$}export{p as u};

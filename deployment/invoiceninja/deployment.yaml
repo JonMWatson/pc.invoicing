@@ -1,0 +1,366 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: invoiceninja
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: invoiceninja
+spec:
+  replicas: 2  # Increased for high availability
+  selector:
+    matchLabels:
+      app: server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable-alpine
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/in-vhost.conf
+              subPath: in-vhost.conf
+            - name: app-public
+              mountPath: /var/www/app/public
+            - name: ssl-certs
+              mountPath: /etc/nginx/ssl
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health-check
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: app-public
+          persistentVolumeClaim:
+            claimName: app-public-pvc
+        - name: ssl-certs
+          secret:
+            secretName: ssl-certs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: invoiceninja
+spec:
+  replicas: 2  # Increased for high availability
+  selector:
+    matchLabels:
+      app: invoiceninja
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: invoiceninja
+    spec:
+      containers:
+        - name: app
+          image: invoiceninja/invoiceninja:5
+          envFrom:
+            - configMapRef:
+                name: env-config
+          volumeMounts:
+            - name: hosts
+              mountPath: /etc/hosts
+              subPath: hosts
+            - name: app-public
+              mountPath: /var/www/app/public
+            - name: app-storage
+              mountPath: /var/www/app/storage
+            - name: php-config
+              mountPath: /usr/local/etc/php/php.ini
+              subPath: php.ini
+            - name: php-cli-config
+              mountPath: /usr/local/etc/php/php-cli.ini
+              subPath: php-cli.ini
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - php
+                - -r
+                - "if(file_exists('/var/www/app/public/index.php')) { exit(0); } else { exit(1); }"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - php
+                - -r
+                - "if(file_exists('/var/www/app/public/index.php')) { exit(0); } else { exit(1); }"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: hosts
+          configMap:
+            name: hosts-config
+        - name: app-public
+          persistentVolumeClaim:
+            claimName: app-public-pvc
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: app-storage-pvc
+        - name: php-config
+          configMap:
+            name: php-config
+        - name: php-cli-config
+          configMap:
+            name: php-cli-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: invoiceninja
+spec:
+  replicas: 1  # Database should have only one instance to avoid data inconsistency
+  selector:
+    matchLabels:
+      app: db
+  strategy:
+    type: Recreate  # Ensure we don't have multiple database instances running simultaneously
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8
+          envFrom:
+            - configMapRef:
+                name: env-config
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 5
+            periodSeconds: 2
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-data-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  namespace: invoiceninja
+spec:
+  schedule: "0 2 * * *"  # Run daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: mysql:8
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_FILE="/backup/ninja-$(date +%Y%m%d-%H%M%S).sql"
+              echo "Creating backup: $BACKUP_FILE"
+              mysqldump -h db -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE > $BACKUP_FILE
+              find /backup -name "*.sql" -type f -mtime +7 -delete
+            envFrom:
+            - configMapRef:
+                name: env-config
+            volumeMounts:
+            - name: backup-volume
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-volume
+            persistentVolumeClaim:
+              claimName: backup-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: invoiceninja
+spec:
+  type: LoadBalancer  # Use LoadBalancer for cloud environments
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
+  selector:
+    app: server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: invoiceninja
+spec:
+  ports:
+    - port: 9000
+      targetPort: 9000
+  selector:
+    app: invoiceninja
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: invoiceninja
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-public-pvc
+  namespace: invoiceninja
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard  # Adjust based on your cloud provider
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-storage-pvc
+  namespace: invoiceninja
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard  # Adjust based on your cloud provider
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data-pvc
+  namespace: invoiceninja
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard  # Adjust based on your cloud provider
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: invoiceninja
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard  # Adjust based on your cloud provider
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: invoiceninja-ingress
+  namespace: invoiceninja
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  tls:
+  - hosts:
+    - your-domain.com
+    secretName: invoiceninja-tls
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: server
+            port:
+              number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  namespace: invoiceninja
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: your-email@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx

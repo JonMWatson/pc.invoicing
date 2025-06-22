@@ -1,93 +1,149 @@
-# invoicing.pc
+# Pro-Clean Invoicing Software
 
+A production-ready deployment of Invoice Ninja for Pro-Clean's invoicing needs.
 
+## Overview
 
-## Getting started
+This repository contains a Docker-based setup for running Invoice Ninja, a powerful open-source invoicing application. The setup includes:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- Nginx web server
+- PHP application running Invoice Ninja v5
+- MySQL 8 database
+- Automated backup system
+- SSL support with Let's Encrypt
+- Production-optimized configurations
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Development Setup
 
-## Add your files
+For local development, use the standard docker-compose file:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+```bash
+# Start the development environment
+docker-compose up -d
 
+# Access the application at http://localhost:8080
+# Default login: admin@example.com / changeme!
 ```
-cd existing_repo
-git remote add origin https://mw-git.com/web/invoicing.pc.git
-git branch -M main
-git push -uf origin main
+
+## Production Deployment
+
+For production deployment, follow these steps:
+
+### 1. Prepare Your Server
+
+Ensure your server has:
+- Docker and Docker Compose installed
+- A domain name pointing to your server
+- Ports 80 and 443 open in your firewall
+
+### 2. Configure Production Environment
+
+1. Edit the production environment file:
+
+```bash
+# Review and update the production environment variables
+nano env.production
 ```
 
-## Integrate with your tools
+Make sure to update:
+- `APP_URL` with your domain
+- Database credentials
+- Admin user email and password
+- SMTP mail settings
 
-- [ ] [Set up project integrations](https://mw-git.com/web/invoicing.pc/-/settings/integrations)
+### 3. Deploy the Application
 
-## Collaborate with your team
+Use the deployment script:
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+```bash
+# Without SSL
+./deploy.sh your-domain.com
 
-## Test and Deploy
+# With SSL (recommended)
+./deploy.sh your-domain.com --with-ssl your-email@example.com
+```
 
-Use the built-in continuous integration in GitLab.
+The script will:
+- Update configuration files with your domain
+- Set up SSL certificates if requested
+- Start the application containers
+- Provide next steps
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+### 4. Post-Deployment Steps
 
-***
+1. Log in with the credentials specified in `env.production`
+2. Complete the initial setup wizard
+3. Configure your company details and branding
+4. Set up email templates and payment gateways
 
-# Editing this README
+## Maintenance
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Backups
 
-## Suggestions for a good README
+Automated daily backups are configured in the production setup. To manually create a backup:
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+# Create a local backup
+./backup.sh
 
-## Name
-Choose a self-explaining name for your project.
+# Create a backup and copy to a remote server
+./backup.sh --remote user@remote-server:/path/to/backup/dir
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Backups are stored in `./docker/mysql/backup/`.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### SSL Certificate Renewal
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+SSL certificates are automatically renewed. The renewal script is set up as a cron job during deployment.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### Updating the Application
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+To update to the latest version:
+
+```bash
+# Pull the latest images
+docker-compose -f docker-compose.production.yml pull
+
+# Restart the services
+docker-compose -f docker-compose.production.yml up -d
+```
+
+### Monitoring
+
+To view logs:
+
+```bash
+# View all logs
+docker-compose -f docker-compose.production.yml logs
+
+# Follow logs in real-time
+docker-compose -f docker-compose.production.yml logs -f
+
+# View logs for a specific service
+docker-compose -f docker-compose.production.yml logs -f app
+```
+
+## Configuration Files
+
+- `env.production`: Environment variables for production
+- `docker-compose.production.yml`: Docker Compose configuration for production
+- `config/nginx/in-vhost.production.conf`: Nginx configuration for production
+- `config/php/php.production.ini`: PHP configuration for production
+- `config/php/php-cli.production.ini`: PHP CLI configuration for production
+
+## Scripts
+
+- `deploy.sh`: Deployment script
+- `backup.sh`: Database backup script
+- `setup-ssl.sh`: SSL certificate setup script
+
+## Removing the White Label
+
+To remove the "Purchase white label" button, you'll need to purchase a white label license from Invoice Ninja. After purchasing, you can enter your license key in the application settings.
 
 ## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+For Invoice Ninja support, visit:
+- [Invoice Ninja Documentation](https://invoiceninja.github.io/)
+- [Invoice Ninja GitHub](https://github.com/invoiceninja/invoiceninja)
+- [Invoice Ninja Forum](https://forum.invoiceninja.com/)

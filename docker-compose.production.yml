@@ -1,0 +1,74 @@
+services:
+  server:
+    image: nginx
+    restart: always
+    env_file: env.production
+    volumes:
+      - ./config/nginx/in-vhost.production.conf:/etc/nginx/conf.d/in-vhost.conf:ro
+      - ./docker/app/public:/var/www/app/public:ro
+      - ./ssl:/etc/nginx/ssl:ro  # Mount SSL certificates
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - invoiceninja
+    # Remove extra_hosts for production
+
+  app:
+    image: invoiceninja/invoiceninja:5
+    env_file: env.production
+    restart: always
+    volumes:
+      - ./docker/app/public:/var/www/app/public:rw,delegated
+      - ./docker/app/storage:/var/www/app/storage:rw,delegated
+      - ./config/php/php.production.ini:/usr/local/etc/php/php.ini
+      - ./config/php/php-cli.production.ini:/usr/local/etc/php/php-cli.ini
+    depends_on:
+      - db
+    networks:
+      - invoiceninja
+    # Remove extra_hosts for production
+
+  db:
+    image: mysql:8
+    restart: always
+    env_file: env.production
+    volumes:
+      - ./docker/mysql/data:/var/lib/mysql:rw,delegated
+      - ./docker/mysql/backup:/backup:rw  # Directory for database backups
+    networks:
+      - invoiceninja
+    # Remove extra_hosts for production
+    # Add healthcheck for database
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Add backup service for automated backups
+  backup:
+    image: alpine
+    volumes:
+      - ./docker/mysql/backup:/backup:rw
+    depends_on:
+      - db
+    command: |
+      sh -c '
+        apk add --no-cache mysql-client
+        while true; do
+          BACKUP_FILE="/backup/ninja-$$(date +%Y%m%d-%H%M%S).sql"
+          echo "Creating backup: $$BACKUP_FILE"
+          mysqldump -h db -u $$MYSQL_USER -p$$MYSQL_PASSWORD $$MYSQL_DATABASE > $$BACKUP_FILE
+          find /backup -name "*.sql" -type f -mtime +7 -delete
+          sleep 86400
+        '
+    env_file: env.production
+    restart: always
+    networks:
+      - invoiceninja
+
+networks:
+  invoiceninja:
